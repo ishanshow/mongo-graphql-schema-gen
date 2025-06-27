@@ -1,5 +1,31 @@
 import { MongoClient, Db, Collection } from 'mongodb';
 import fs from 'fs';
+
+// Schema Generation Function
+async function schemaGen() {
+  const connectionString = 'YOUR_CONNECTION_STRING';
+  const databaseName = 'YOUR_DATABASE_NAME';
+  const collectionNames = ['YOUR_COLLECTION_NAME'];
+  
+  try {
+    const graphqlSchema = await convertMongoSchemaToGraphQL(
+      connectionString,
+      databaseName,
+      collectionNames
+    );
+
+    const outputPath = './generated-schema.graphql';
+    fs.writeFileSync(outputPath, graphqlSchema, 'utf8');
+    
+    console.log('Generated GraphQL Schema:');
+    console.log(`Schema saved to: ${outputPath}`);
+    console.log('\nSchema preview:');
+    console.log(graphqlSchema);
+  } catch (error) {
+    console.error('Error generating schema:', error);
+  }
+}
+
 // MongoDB to GraphQL Schema Converter (using native MongoDB driver)
 export class MongoToGraphQLConverter {
   private db: Db;
@@ -165,11 +191,27 @@ export class MongoToGraphQLConverter {
     const queries = collectionNames.map(collectionName => {
       const typeName = collectionName.charAt(0).toUpperCase() + 
                       collectionName.slice(1).replace(/s$/, '');
-      const lowerName = typeName.toLowerCase();
+      
+      // Convert PascalCase to snake_case
+      const singularName = typeName
+        .replace(/([A-Z])/g, (match, letter, index) => index === 0 ? letter.toLowerCase() : '_' + letter.toLowerCase())
+        .toLowerCase();
+      
+      // Create proper plural form
+      let pluralName: string;
+      if (singularName.endsWith('x') || singularName.endsWith('s') || 
+          singularName.endsWith('sh') || singularName.endsWith('ch')) {
+        pluralName = singularName + 'es';
+      } else if (singularName.endsWith('y') && !['a', 'e', 'i', 'o', 'u'].includes(singularName.charAt(singularName.length - 2))) {
+        // If ends with 'y' preceded by consonant, change 'y' to 'ies'
+        pluralName = singularName.slice(0, -1) + 'ies';
+      } else {
+        pluralName = singularName + 's';
+      }
       
       return [
-        `  ${collectionName}: [${typeName}!]!`,
-        `  ${lowerName}(id: ID!): ${typeName}`
+        `  ${pluralName}: [${typeName}!]!`,
+        `  ${singularName}(id: ID!): ${typeName}`
       ];
     }).flat();
     
@@ -204,30 +246,5 @@ export async function convertMongoSchemaToGraphQL(
   }
 }
 
-// Example usage
-async function example() {
-  const connectionString = 'YOUR_SCHEMA_URL'
-  const databaseName = 'YOUR_DATABASE_NAME';
-  const collectionNames = ['YOUR_COLLECTION_NAME'];
-  
-  try {
-    const graphqlSchema = await convertMongoSchemaToGraphQL(
-      connectionString,
-      databaseName,
-      collectionNames
-    );
-
-    const outputPath = './generated-schema.graphql';
-    fs.writeFileSync(outputPath, graphqlSchema, 'utf8');
-    
-    console.log('Generated GraphQL Schema:');
-    console.log(`Schema saved to: ${outputPath}`);
-    console.log('\nSchema preview:');
-    console.log(graphqlSchema);
-  } catch (error) {
-    console.error('Error generating schema:', error);
-  }
-}
-
-// Uncomment to run the example
-example();
+// Uncomment to run the schema generator
+schemaGen();
